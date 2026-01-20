@@ -29,8 +29,11 @@ function VerifyContent() {
   const [product, setProduct] = useState<Product | null>(null);
   const [scanTime, setScanTime] = useState<string>('');
 
+  // --- SETTING NOMOR WA ADMIN DISINI ---
+  // Gunakan format 628... (tanpa + atau 0 di depan)
+  const NOMOR_WA_ADMIN = "6281368916211"; 
+
   useEffect(() => {
-    // Ambil full URL atau parameter code
     const rawCode = searchParams.get('code');
     if (rawCode) {
       verifyProduct(rawCode);
@@ -41,28 +44,22 @@ function VerifyContent() {
     setStatus('LOADING');
 
     // --- 🔫 LOGIKA SNIPER (PEMBERSIH LINK) ---
-    // Kita cari teks yang polanya: "HURUF/ANGKA" + "-" + "HURUF/ANGKA"
-    // Contoh: L2-BWQ3R, OLI-X992
-    // Ini akan membuang "https://..." secara otomatis
-    
     let code = rawCode;
-    // Regex: Cari (HurufAngka) STRIP (HurufAngka)
+    // Regex: Cari pola KODE-ACAK (Huruf/Angka - Huruf/Angka)
     const match = rawCode.match(/([A-Z0-9]+-[A-Z0-9]+)/i); 
 
     if (match) {
-      code = match[0]; // Ambil yang bersih (L2-BWQ3R)
+      code = match[0]; 
     } else if (code.includes('code=')) {
-      // Cadangan cara lama
       code = code.split('code=')[1];
     }
     
-    // Hapus sampah lain di belakang kalau ada (misal &fbclid=...)
+    // Hapus sampah URL lain
     if (code.includes('&')) {
         code = code.split('&')[0];
     }
 
     console.log("🔍 Mencari Kode Bersih:", code); 
-    // ------------------------------------------
 
     try {
       // 1. CEK DATABASE
@@ -81,7 +78,7 @@ function VerifyContent() {
 
       // 2. LOGIKA LIMIT 3 (PERAWAN / JANDA / HANGUS) 🕵️‍♂️
       const newCount = (productData.scan_count || 0) + 1;
-      const BATAS_AMAN = 3; // <--- LIMIT SCAN
+      const BATAS_AMAN = 3; // <--- LIMIT SCAN MAKSIMAL
 
       // Update Database
       await supabase
@@ -112,7 +109,7 @@ function VerifyContent() {
     <div className="min-h-screen bg-gray-100 flex flex-col items-center justify-center p-4">
       <div className="bg-white p-6 rounded-2xl shadow-xl w-full max-w-md text-center border-t-8 border-gray-300 relative overflow-hidden">
         
-        {/* LOGO */}
+        {/* LOGO BRAND */}
         <h1 className="text-xl font-bold text-gray-400 mb-6 tracking-widest">AHMTO VERIFY</h1>
 
         {/* LOADING */}
@@ -133,7 +130,15 @@ function VerifyContent() {
           <div className="border-t-8 border-red-500 -mt-6 pt-6">
             <div className="text-6xl mb-2">❌</div>
             <h2 className="text-2xl font-bold text-red-600 mb-2">TIDAK TERDAFTAR</h2>
-            <p className="text-gray-600">Kode QR ini tidak dikenali. Kemungkinan besar produk ini <b>PALSU</b>.</p>
+            <p className="text-gray-600 mb-4">Kode QR ini tidak dikenali. Kemungkinan besar produk ini <b>PALSU</b>.</p>
+            {/* Tombol Lapor untuk Invalid */}
+             <a 
+                href={`https://wa.me/${NOMOR_WA_ADMIN}?text=Halo%20Admin%2C%20saya%20scan%20produk%20tapi%20hasilnya%20TIDAK%20TERDAFTAR.%20Mohon%20bantuan.`}
+                target="_blank"
+                className="inline-block bg-gray-800 text-white px-4 py-2 rounded-full text-sm font-bold shadow hover:bg-gray-900 transition"
+              >
+                📞 Hubungi Admin
+              </a>
           </div>
         )}
 
@@ -141,7 +146,7 @@ function VerifyContent() {
         {status === 'ERROR' && (
           <div>
             <div className="text-6xl mb-2">⚠️</div>
-            <p className="text-red-500">Gagal terhubung ke server.</p>
+            <p className="text-red-500">Gagal terhubung ke server. Cek koneksi internet Anda.</p>
           </div>
         )}
 
@@ -188,9 +193,18 @@ function VerifyContent() {
                 <p className="text-sm text-red-700 mt-3 font-bold">
                   Limit Scan Habis! (Total: {product.scan_count}x)
                 </p>
-                <p className="text-xs text-gray-600 mt-2">
+                <p className="text-xs text-gray-600 mt-2 mb-4">
                   Kode ini sudah terlalu sering digunakan. Kemungkinan botol bekas/daur ulang.
                 </p>
+
+                {/* TOMBOL LAPOR VIA WA (KHUSUS MERAH) */}
+                <a 
+                  href={`https://wa.me/${NOMOR_WA_ADMIN}?text=Halo%20Admin%2C%20saya%20scan%20produk%20kode%20${product.code}%20tapi%20hasilnya%20KODE%20HANGUS.%20Mohon%20bantuan.`}
+                  target="_blank"
+                  className="inline-flex items-center bg-red-600 text-white px-5 py-2 rounded-full text-sm font-bold shadow-lg hover:bg-red-700 transition transform hover:scale-105"
+                >
+                  📞 LAPORKAN PALSU
+                </a>
               </div>
             )}
 
