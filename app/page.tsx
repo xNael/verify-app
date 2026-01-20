@@ -4,7 +4,7 @@ import { useState, useEffect, Suspense } from 'react';
 import { createClient } from '@supabase/supabase-js';
 import { useSearchParams } from 'next/navigation';
 
-// --- DEFINISI TIPE DATA (Biar TS Gak Marah) ---
+// --- DEFINISI TIPE DATA ---
 interface Product {
   id?: number;
   code: string;
@@ -18,7 +18,6 @@ interface Product {
 type ScanStatus = 'IDLE' | 'LOADING' | 'FIRST_SCAN' | 'WARNING' | 'FAKE' | 'INVALID' | 'ERROR';
 
 // --- KONFIGURASI SUPABASE ---
-// Pastikan variabel env ini ada di .env.local kamu
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
 const supabase = createClient(supabaseUrl, supabaseKey);
@@ -31,6 +30,7 @@ function VerifyContent() {
   const [scanTime, setScanTime] = useState<string>('');
 
   useEffect(() => {
+    // Ambil full URL atau parameter code
     const rawCode = searchParams.get('code');
     if (rawCode) {
       verifyProduct(rawCode);
@@ -40,14 +40,32 @@ function VerifyContent() {
   const verifyProduct = async (rawCode: string) => {
     setStatus('LOADING');
 
-    // 1. BERSIHKAN KODE
+    // --- 🔫 LOGIKA SNIPER (PEMBERSIH LINK) ---
+    // Kita cari teks yang polanya: "HURUF/ANGKA" + "-" + "HURUF/ANGKA"
+    // Contoh: L2-BWQ3R, OLI-X992
+    // Ini akan membuang "https://..." secara otomatis
+    
     let code = rawCode;
-    if (code.includes('code=')) {
+    // Regex: Cari (HurufAngka) STRIP (HurufAngka)
+    const match = rawCode.match(/([A-Z0-9]+-[A-Z0-9]+)/i); 
+
+    if (match) {
+      code = match[0]; // Ambil yang bersih (L2-BWQ3R)
+    } else if (code.includes('code=')) {
+      // Cadangan cara lama
       code = code.split('code=')[1];
     }
+    
+    // Hapus sampah lain di belakang kalau ada (misal &fbclid=...)
+    if (code.includes('&')) {
+        code = code.split('&')[0];
+    }
+
+    console.log("🔍 Mencari Kode Bersih:", code); 
+    // ------------------------------------------
 
     try {
-      // 2. CEK DATABASE
+      // 1. CEK DATABASE
       const { data, error } = await supabase
         .from('products')
         .select('*')
@@ -59,12 +77,11 @@ function VerifyContent() {
         return;
       }
 
-      // Casting data ke tipe Product
       const productData = data as Product;
 
-      // 3. LOGIKA LIMIT 3 (PERAWAN VS JANDA VS HANGUS) 🕵️‍♂️
+      // 2. LOGIKA LIMIT 3 (PERAWAN / JANDA / HANGUS) 🕵️‍♂️
       const newCount = (productData.scan_count || 0) + 1;
-      const BATAS_AMAN = 3; // <--- LIMIT DISET JADI 3 DISINI
+      const BATAS_AMAN = 3; // <--- LIMIT SCAN
 
       // Update Database
       await supabase
@@ -72,17 +89,17 @@ function VerifyContent() {
         .update({ scan_count: newCount })
         .eq('code', code);
 
-      // Update State Lokal
+      // Update Tampilan Lokal
       setProduct({ ...productData, scan_count: newCount });
       setScanTime(new Date().toLocaleString('id-ID'));
 
-      // 4. VOPNIS HAKIM ⚖️
+      // 3. VONIS STATUS ⚖️
       if (newCount === 1) {
-        setStatus('FIRST_SCAN'); // HIJAU EMAS (Perawan)
+        setStatus('FIRST_SCAN'); // Scan Ke-1 (Perawan)
       } else if (newCount <= BATAS_AMAN) {
-        setStatus('WARNING');    // KUNING (Bekas tapi Aman)
+        setStatus('WARNING');    // Scan Ke-2 & 3 (Bekas)
       } else {
-        setStatus('FAKE');       // MERAH (Hangus/Palsu)
+        setStatus('FAKE');       // Scan Ke-4 dst (Hangus)
       }
 
     } catch (err) {
@@ -111,7 +128,7 @@ function VerifyContent() {
           <p className="text-gray-600">Silakan scan QR Code pada kemasan produk.</p>
         )}
 
-        {/* INVALID */}
+        {/* INVALID (TIDAK ADA DI DB) */}
         {status === 'INVALID' && (
           <div className="border-t-8 border-red-500 -mt-6 pt-6">
             <div className="text-6xl mb-2">❌</div>
@@ -120,7 +137,7 @@ function VerifyContent() {
           </div>
         )}
 
-        {/* ERROR */}
+        {/* ERROR INTERNET */}
         {status === 'ERROR' && (
           <div>
             <div className="text-6xl mb-2">⚠️</div>
@@ -209,6 +226,7 @@ function VerifyContent() {
   );
 }
 
+// WRAPPER UTAMA
 export default function VerifyPage() {
   return (
     <Suspense fallback={<div className="text-center p-10">Loading System...</div>}>
